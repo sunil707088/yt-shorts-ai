@@ -1,237 +1,78 @@
-// Centralized Gemini service - all requests go through Vercel API routes
-// Never expose API keys in frontend
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY
+const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+async function ask(prompt) {
+  const res = await fetch(URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error?.message || `HTTP ${res.status}`)
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+}
 
 class GeminiService {
-  constructor() {
-    this.retryAttempts = 3
-    this.retryDelay = 1000
-    this.requestQueue = []
-    this.processing = false
+  async generateIdeas({ niche, audience, platform, count = 10 }) {
+    return { result: await ask(`Generate ${count} viral YouTube Shorts ideas for niche: ${niche}, audience: ${audience}, platform: ${platform}. Numbered list with title and description.`) }
   }
-
-  async _request(endpoint, payload, attempt = 0) {
-    try {
-      const response = await fetch(`${API_BASE}/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }))
-        if (response.status === 429 && attempt < this.retryAttempts) {
-          await this._delay(this.retryDelay * Math.pow(2, attempt))
-          return this._request(endpoint, payload, attempt + 1)
-        }
-        throw new Error(error.error || `HTTP ${response.status}`)
-      }
-
-      return await response.json()
-    } catch (err) {
-      if (attempt < this.retryAttempts && err.name !== 'AbortError') {
-        await this._delay(this.retryDelay * Math.pow(2, attempt))
-        return this._request(endpoint, payload, attempt + 1)
-      }
-      throw err
-    }
-  }
-
-  _delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
-  }
-
-  // Generate viral ideas
-  async generateIdeas({ niche, audience, platform, count = 30 }) {
-    return this._request('generate', {
-      type: 'ideas',
-      niche,
-      audience,
-      platform,
-      count,
-    })
-  }
-
-  // Generate full script
   async generateScript({ topic, tone, duration, niche }) {
-    return this._request('generate', {
-      type: 'script',
-      topic,
-      tone,
-      duration,
-      niche,
-    })
+    return { result: await ask(`Write a ${duration}-second YouTube Shorts script about "${topic}" in ${tone} tone for ${niche} niche. Include hook, content, CTA.`) }
   }
-
-  // Generate hooks
-  async generateHooks({ topic, niche, count = 20 }) {
-    return this._request('generate', {
-      type: 'hooks',
-      topic,
-      niche,
-      count,
-    })
+  async generateHooks({ topic, niche, count = 10 }) {
+    return { result: await ask(`Generate ${count} viral hooks for a YouTube Short about "${topic}" in ${niche} niche.`) }
   }
-
-  // Generate CTAs
   async generateCTAs({ topic, goal }) {
-    return this._request('generate', {
-      type: 'ctas',
-      topic,
-      goal,
-    })
+    return { result: await ask(`Generate 10 CTAs for a YouTube Short about "${topic}" with goal: ${goal}.`) }
   }
-
-  // Generate titles
   async generateTitles({ topic, niche }) {
-    return this._request('generate', {
-      type: 'titles',
-      topic,
-      niche,
-    })
+    return { result: await ask(`Generate 15 viral YouTube Shorts titles for "${topic}" in ${niche} niche.`) }
   }
-
-  // Generate hashtags
   async generateHashtags({ topic, niche, platform }) {
-    return this._request('generate', {
-      type: 'hashtags',
-      topic,
-      niche,
-      platform,
-    })
+    return { result: await ask(`Generate 30 hashtags for ${platform} short about "${topic}" in ${niche} niche.`) }
   }
-
-  // Generate thumbnail text
   async generateThumbnailText({ topic, emotion }) {
-    return this._request('generate', {
-      type: 'thumbnail',
-      topic,
-      emotion,
-    })
+    return { result: await ask(`Generate 10 thumbnail text ideas for "${topic}" evoking ${emotion}. Under 6 words each.`) }
   }
-
-  // Generate bio
   async generateBio({ niche, personality, goals }) {
-    return this._request('generate', {
-      type: 'bio',
-      niche,
-      personality,
-      goals,
-    })
+    return { result: await ask(`Write 5 YouTube bio options for ${niche} creator with ${personality} personality. Goals: ${goals}.`) }
   }
-
-  // Rewrite script
   async rewriteScript({ script, tone, improvements }) {
-    return this._request('generate', {
-      type: 'rewrite',
-      script,
-      tone,
-      improvements,
-    })
+    return { result: await ask(`Rewrite this script in ${tone} tone with improvements: ${improvements}.\n\n${script}`) }
   }
-
-  // Convert long form to shorts
   async convertToShorts({ content, count = 5 }) {
-    return this._request('repurpose', {
-      type: 'longToShorts',
-      content,
-      count,
-    })
+    return { result: await ask(`Convert this content into ${count} YouTube Shorts scripts:\n\n${content}`) }
   }
-
-  // Repurpose content
   async repurposeContent({ content, fromPlatform, toPlatforms }) {
-    return this._request('repurpose', {
-      type: 'repurpose',
-      content,
-      fromPlatform,
-      toPlatforms,
-    })
+    return { result: await ask(`Repurpose this ${fromPlatform} content for ${toPlatforms.join(', ')}:\n\n${content}`) }
   }
-
-  // Analyze viral potential
   async analyzeViral({ content, platform }) {
-    return this._request('analyze', {
-      type: 'viral',
-      content,
-      platform,
-    })
+    return { result: await ask(`Analyze viral potential of this ${platform} content. Score 1-10 with tips:\n\n${content}`) }
   }
-
-  // Predict performance
   async predictPerformance({ content, niche, platform }) {
-    return this._request('analyze', {
-      type: 'performance',
-      content,
-      niche,
-      platform,
-    })
+    return { result: await ask(`Predict performance of this ${platform} content in ${niche} niche:\n\n${content}`) }
   }
-
-  // Get trending topics
   async getTrending({ niche, platform }) {
-    return this._request('trends', {
-      niche,
-      platform,
-    })
+    return { result: await ask(`Top 20 trending topics for ${platform} in ${niche} niche right now.`) }
   }
-
-  // Get viral keywords
   async getViralKeywords({ niche, platform }) {
-    return this._request('generate', {
-      type: 'keywords',
-      niche,
-      platform,
-    })
+    return { result: await ask(`30 viral keywords for ${platform} content in ${niche} niche.`) }
   }
-
-  // AI assistant chat
   async chat({ messages, context }) {
-    return this._request('assistant', {
-      messages,
-      context,
-    })
+    const history = messages.map(m => `${m.role}: ${m.content}`).join('\n')
+    return { result: await ask(`You are a YouTube Shorts expert. Context: ${context}\n\n${history}`) }
   }
-
-  // Multi-platform content
   async generateMultiPlatform({ content, platforms }) {
-    return this._request('repurpose', {
-      type: 'multiPlatform',
-      content,
-      platforms,
-    })
+    return { result: await ask(`Adapt this content for ${platforms.join(', ')}:\n\n${content}`) }
   }
-
-  // Generate content calendar
   async generateCalendar({ niche, frequency, duration, goals }) {
-    return this._request('generate', {
-      type: 'calendar',
-      niche,
-      frequency,
-      duration,
-      goals,
-    })
+    return { result: await ask(`Create ${duration} content calendar for ${niche} creator posting ${frequency}x/week. Goals: ${goals}.`) }
   }
-
-  // Generate series ideas
   async generateSeries({ niche, topic, episodeCount }) {
-    return this._request('generate', {
-      type: 'series',
-      niche,
-      topic,
-      episodeCount,
-    })
+    return { result: await ask(`Create ${episodeCount}-episode Shorts series about "${topic}" for ${niche} niche.`) }
   }
-
-  // Generate collab ideas
   async generateCollabs({ niche, audience, style }) {
-    return this._request('generate', {
-      type: 'collabs',
-      niche,
-      audience,
-      style,
-    })
+    return { result: await ask(`Suggest 10 collab ideas for ${niche} creator with ${audience} audience and ${style} style.`) }
   }
 }
 
